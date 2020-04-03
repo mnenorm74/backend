@@ -1,12 +1,15 @@
 ﻿using BadNews.ModelBuilders.News;
 using BadNews.Models.News;
 using BadNews.Repositories.News;
+using BadNews.Validaton;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.DataAnnotations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Serilog;
 using System;
 using System.Globalization;
 using System.IO;
@@ -34,16 +37,31 @@ namespace BadNews
         {
             services.AddSingleton<INewsRepository, NewsRepository>();
             services.AddSingleton<INewsModelBuilder, NewsModelBuilder>();
+            services.AddSingleton<IValidationAttributeAdapterProvider, StopWordsAttributeAdapterProvider>();
+            var mvc = services.AddControllersWithViews();
+            if (env.IsDevelopment())
+                mvc.AddRazorRuntimeCompilation();
         }
 
         // В этом методе конфигурируется последовательность обработки HTTP-запроса
         public void Configure(IApplicationBuilder app)
         {
-            app.UseDeveloperExceptionPage();
+            //app.UseDeveloperExceptionPage();
+            if (env.IsDevelopment())
+                app.UseDeveloperExceptionPage();
+            else
+                app.UseExceptionHandler("/Errors/Exception");
             app.UseHttpsRedirection();
             app.UseStaticFiles();
+            app.UseSerilogRequestLogging();
+            app.UseStatusCodePagesWithReExecute("/StatusCode/{0}");
 
-            app.Map("/news", newsApp =>
+            /*app.Map("/news/fullarticle", fullArticleApp =>
+            {
+                fullArticleApp.Run(RenderFullArticlePage);
+            });
+            */
+            /*app.Map("/news", newsApp =>
             {
                 newsApp.Map("/fullarticle", fullArticleApp =>
                 {
@@ -51,14 +69,24 @@ namespace BadNews
                 });
 
                 newsApp.Run(RenderIndexPage);
-            });
+            });*/
 
-            app.MapWhen(context => context.Request.Path == "/", rootPathApp =>
+            /*app.MapWhen(context => context.Request.Path == "/", rootPathApp =>
             {
                 rootPathApp.Run(RenderIndexPage);
+            });*/
+
+            app.UseRouting();
+            app.UseEndpoints(endpoints =>
+        {
+            endpoints.MapControllerRoute("status-code", "StatusCode/{code?}", new
+            {
+                controller = "Errors",
+                action = "StatusCode"
             });
 
-            // Остальные запросы — 404 Not Found
+            endpoints.MapControllerRoute("default", "{controller=News}/{action=Index}/{id?}");;
+        });
         }
 
         // Региональные настройки, которые используются при обработке запросов новостей.
